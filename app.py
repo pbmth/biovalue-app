@@ -1,80 +1,66 @@
 import streamlit as st
 import pandas as pd
 
-# 1. LEHE SEADISTUS
-st.set_page_config(page_title="Bio-Value Live Engine", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Bio-Value Live Engine", layout="wide")
 
-# --- GOOGLE SHEETS ANDMETE LINK ---
-# ASENDA SEE LINK OMA GOOGLE SHEETSI PUBLISHED CSV LINGIGA (File -> Share -> Publish to Web -> CSV)
+# --- ANDMETE LAADIMINE ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS_D60I8P9Qh7zH_7L6_Vn4YgN4W4v9G7_G6v4v/pub?output=csv"
 
-@st.cache_data(ttl=600) # Uuendab andmeid iga 10 minuti tagant
+@st.cache_data(ttl=60) 
 def load_data():
     try:
-        # Loeme andmed. Kui link on vigane, kasutame näidisandmeid, et äpp ei krahhiks.
         df = pd.read_csv(SHEET_URL)
         return df
     except:
-        # NÄIDISANDMED (kui Google Sheets linki pole veel lisatud)
+        # Kui faili veel pole või tulp puudub, tekitame näidis-URL-id
         data = {
-            'Brand': ['BudgetHealth', 'Thorne', 'NOW Foods', 'Pure Encaps', 'BulkSupps'],
-            'Form': ['Oxide', 'Bisglycinate', 'Citrate', 'Glycinate', 'Oxide'],
-            'Price_Bottle': [12.00, 48.00, 18.00, 42.00, 9.00],
-            'Shipping': [4.00, 0.00, 5.00, 0.00, 6.00],
-            'Capsules': [120, 60, 90, 60, 250],
-            'Mg_per_Cap': [500, 200, 200, 120, 500],
-            'Yield_Coeff': [0.60, 0.14, 0.16, 0.14, 0.60],
-            'Absorb_Coeff': [0.04, 0.50, 0.25, 0.50, 0.04]
+            'Brand': ['BudgetHealth', 'Thorne', 'NOW Foods'],
+            'Form': ['Oxide', 'Bisglycinate', 'Citrate'],
+            'Price_Bottle': [12.00, 48.00, 18.00],
+            'Shipping': [4.00, 0.00, 5.00],
+            'Capsules': [120, 60, 90],
+            'Mg_per_Cap': [500, 200, 200],
+            'Yield_Coeff': [0.60, 0.14, 0.16],
+            'Absorb_Coeff': [0.04, 0.50, 0.25],
+            'URL': ['https://google.com', 'https://google.com', 'https://google.com']
         }
         return pd.DataFrame(data)
 
-# 2. ANDMETE TÖÖTLUS
 df = load_data()
 
-# Arvutame väärtused
+# --- ARVUTUSED ---
 df['Total_Cost'] = df['Price_Bottle'] + df['Shipping']
 df['Elemental_Mg_Total'] = df['Capsules'] * df['Mg_per_Cap'] * df['Yield_Coeff']
 df['Absorbed_Mg_Total'] = df['Elemental_Mg_Total'] * df['Absorb_Coeff']
-
-# Kolm strateegilist hinda
-df['Price_per_Bottle'] = df['Total_Cost']
-df['Price_per_Elemental_mg'] = df['Total_Cost'] / df['Elemental_Mg_Total']
 df['Bio_Value_PPAA'] = df['Total_Cost'] / df['Absorbed_Mg_Total']
 
-# 3. KASUTAJALIIDES (UI)
+# --- UI ---
 st.title("🧬 Bio-Value Strategy Engine")
-st.markdown("---")
 
-# Külgriba (Sidebar)
-st.sidebar.header("Sorting Intelligence")
-logic = st.sidebar.radio(
-    "Choose how to view value:",
-    ("1. Price per Bottle (Traditional)", 
-     "2. Price per Elemental Mg (Skeptic)", 
-     "3. Bio-Value / PPAA (Expert View)")
+logic = st.sidebar.radio("View Mode:", ["Bottle Price", "Expert Bio-Value (PPAA)"])
+
+if "Expert" in logic:
+    df_sorted = df.sort_values('Bio_Value_PPAA')
+    st.success("Expert View: Products ranked by true biological value.")
+else:
+    df_sorted = df.sort_values('Total_Cost')
+
+# --- LINKIDE EKRAANI KUVAMINE ---
+# Kasutame Streamliti uut "Link Column" funktsiooni
+st.data_editor(
+    df_sorted[['Brand', 'Form', 'Total_Cost', 'Bio_Value_PPAA', 'URL']],
+    column_config={
+        "URL": st.column_config.LinkColumn(
+            "Buy Now",
+            help="Direct link to the store",
+            validate=r"^https://",
+            display_text="View Store"
+        ),
+        "Bio_Value_PPAA": st.column_config.NumberColumn("PPAA Cost", format="%.4f €"),
+        "Total_Cost": st.column_config.NumberColumn("Price", format="%.2f €")
+    },
+    hide_index=True,
+    use_container_width=True
 )
 
-# 4. VAATED JA SELGITUSED
-if "1." in logic:
-    df_sorted = df.sort_values('Price_per_Bottle')
-    st.subheader("🛒 Traditional View: Sorting by Bottle Price")
-    st.info("Most consumers stop here. They choose the lowest sticker price, unaware of the hidden costs.")
-elif "2." in logic:
-    df_sorted = df.sort_values('Price_per_Elemental_mg')
-    st.subheader("⚖️ Skeptic View: Sorting by Elemental Content")
-    st.info("Better. This shows the cost of the raw mineral, but ignores how much your body can actually use.")
-else:
-    df_sorted = df.sort_values('Bio_Value_PPAA')
-    st.subheader("🔬 Expert View: Bio-Value (PPAA)")
-    st.success("This is the truth. We adjust the price for biological absorption. The 'cheapest' bottle is often the most expensive for your cells.")
-
-# 5. TABELI KUVAMINE
-display_cols = ['Brand', 'Form', 'Price_per_Bottle', 'Price_per_Elemental_mg', 'Bio_Value_PPAA']
-st.dataframe(df_sorted[display_cols].style.highlight_min(axis=0, color='#d4edda').format({
-    'Price_per_Bottle': '{:.2f} €',
-    'Price_per_Elemental_mg': '{:.4f} €',
-    'Bio_Value_PPAA': '{:.4f} €'
-}), use_container_width=True)
-
-st.markdown("---")
-st.write("📊 **The Mission:** Turning consumers smart by exposing the real biological cost of supplementation.")
+st.info("💡 **Affiliate Tip:** These 'View Store' links can be your affiliate links, creating an immediate revenue stream.")
