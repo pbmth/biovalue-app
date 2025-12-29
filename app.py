@@ -12,14 +12,15 @@ def load_data():
         df = pd.read_csv(SHEET_URL)
         return df
     except:
-        # Kui faili veel pole või tulp puudub, tekitame näidis-URL-id
+        # Näidisandmed juhuks kui Sheets pole veel valmis
         data = {
-            'Brand': ['BudgetHealth', 'Thorne', 'NOW Foods'],
+            'Brand': ['BudgetHealth', 'Thorne', 'Bulk Powder'],
             'Form': ['Oxide', 'Bisglycinate', 'Citrate'],
-            'Price_Bottle': [12.00, 48.00, 18.00],
+            'Unit_Type': ['Capsule', 'Capsule', 'Gram'],
+            'Price_Bottle': [12.00, 48.00, 25.00],
             'Shipping': [4.00, 0.00, 5.00],
-            'Capsules': [120, 60, 90],
-            'Mg_per_Cap': [500, 200, 200],
+            'Units_Total': [120, 60, 500], # 500g pulbrit
+            'Mg_per_Unit': [500, 200, 300], # 300mg 1g pulbri kohta
             'Yield_Coeff': [0.60, 0.14, 0.16],
             'Absorb_Coeff': [0.04, 0.50, 0.25],
             'URL': ['https://google.com', 'https://google.com', 'https://google.com']
@@ -28,39 +29,42 @@ def load_data():
 
 df = load_data()
 
-# --- ARVUTUSED ---
+# --- ARVUTUSED (Universaalne loogika) ---
 df['Total_Cost'] = df['Price_Bottle'] + df['Shipping']
-df['Elemental_Mg_Total'] = df['Capsules'] * df['Mg_per_Cap'] * df['Yield_Coeff']
+# Arvutame kogu elementaarse magneesiumi: ühikud * mg ühiku kohta * saagis
+df['Elemental_Mg_Total'] = df['Units_Total'] * df['Mg_per_Unit'] * df['Yield_Coeff']
+# Arvutame imenduva osa
 df['Absorbed_Mg_Total'] = df['Elemental_Mg_Total'] * df['Absorb_Coeff']
+# Bio-Value PPAA (Price Per Actually Absorbed mg)
 df['Bio_Value_PPAA'] = df['Total_Cost'] / df['Absorbed_Mg_Total']
 
 # --- UI ---
 st.title("🧬 Bio-Value Strategy Engine")
+st.markdown("Comparing Supplements by Biological Reality")
 
-logic = st.sidebar.radio("View Mode:", ["Bottle Price", "Expert Bio-Value (PPAA)"])
+logic = st.sidebar.radio("View Mode:", ["Traditional Price", "Expert Bio-Value (PPAA)"])
 
 if "Expert" in logic:
     df_sorted = df.sort_values('Bio_Value_PPAA')
-    st.success("Expert View: Products ranked by true biological value.")
+    st.success("Expert View: Rankings adjusted for Bioavailability.")
 else:
     df_sorted = df.sort_values('Total_Cost')
 
-# --- LINKIDE EKRAANI KUVAMINE ---
-# Kasutame Streamliti uut "Link Column" funktsiooni
+# --- TABEL ---
 st.data_editor(
-    df_sorted[['Brand', 'Form', 'Total_Cost', 'Bio_Value_PPAA', 'URL']],
+    df_sorted[['Brand', 'Form', 'Unit_Type', 'Total_Cost', 'Bio_Value_PPAA', 'URL']],
     column_config={
+        "Unit_Type": "Type",
         "URL": st.column_config.LinkColumn(
             "Buy Now",
-            help="Direct link to the store",
-            validate=r"^https://",
             display_text="View Store"
         ),
-        "Bio_Value_PPAA": st.column_config.NumberColumn("PPAA Cost", format="%.4f €"),
-        "Total_Cost": st.column_config.NumberColumn("Price", format="%.2f €")
+        "Bio_Value_PPAA": st.column_config.NumberColumn("PPAA (Real Cost)", format="%.4f €"),
+        "Total_Cost": st.column_config.NumberColumn("Full Price", format="%.2f €")
     },
     hide_index=True,
     use_container_width=True
 )
 
-st.info("💡 **Affiliate Tip:** These 'View Store' links can be your affiliate links, creating an immediate revenue stream.")
+st.write("---")
+st.caption("PPAA = Price Per Actually Absorbed milligram of elemental magnesium.")
