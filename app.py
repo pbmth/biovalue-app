@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="Bio-Value Supplement Analyzer", layout="wide")
 
 # 1. PASTE YOUR GOOGLE SHEETS CSV LINK HERE
-SHEET_URL = "YOUR_CSV_LINK_HERE"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_eJdOPSMSHjqT5mJ9Cup6IFCH5us6DYO7OEEEtjCjgc/edit?usp=sharing"
 
 @st.cache_data
 def load_data(url):
