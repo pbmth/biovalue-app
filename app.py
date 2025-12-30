@@ -12,47 +12,52 @@ def load_data():
         df = pd.read_csv(SHEET_URL)
         return df
     except:
+        # Placeholder data logic
         data = {
-            'Category': ['Magnesium', 'Magnesium', 'Magnesium'],
-            'Brand': ['Budget Corp', 'Mid-Range', 'Bio-Value Pick'],
-            'Form': ['Oxide', 'Citrate', 'Bisglycinate'],
-            'Unit_Type': ['Capsule', 'Capsule', 'Capsule'],
-            'Price_Bottle': [10.00, 20.00, 35.00],
-            'Shipping': [5.00, 0.00, 0.00],
-            'Units_Total': [100, 100, 100],
-            'Mg_per_Unit': [500, 500, 500],
-            'Yield_Coeff': [0.60, 0.16, 0.14],
-            'Absorb_Coeff': [0.04, 0.25, 0.45],
-            'Notes': ['Cheap but raw', 'Standard', 'Premium Absorption'],
-            'URL': ['#', '#', '#']
+            'Category': ['Magnesium', 'Creatine'],
+            'Brand': ['Thorne', 'BulkPowders'],
+            'Form': ['Bisglycinate', 'Monohydrate'],
+            'Unit_Type': ['Capsule', 'Gram'],
+            'Price_Bottle': [40.00, 25.00],
+            'Shipping': [0.00, 5.00],
+            'Units_Total': [60, 500],
+            'Amount_per_Unit': [200, 1000],
+            'Yield_Coeff': [1.0, 0.88],
+            'Absorb_Coeff': [0.45, 0.99],
+            'Notes': ['Premium', 'Best Seller'],
+            'URL': ['#', '#']
         }
         return pd.DataFrame(data)
 
 df = load_data()
 
-# --- CALCULATIONS ---
+# --- CALCULATIONS (Universal Logic) ---
 df['Total_Cost'] = df['Price_Bottle'] + df['Shipping']
-# Step 1: Total raw compound in bottle
-df['Total_Mg_Compound'] = df['Units_Total'] * df['Mg_per_Unit']
-# Step 2: Elemental Magnesium (The "Skeptic" level)
-df['Elemental_Mg_Total'] = df['Total_Mg_Compound'] * df['Yield_Coeff']
-df['Price_Per_Elemental_Mg'] = df['Total_Cost'] / df['Elemental_Mg_Total']
-# Step 3: Absorbed Magnesium (The "Expert" level)
-df['Absorbed_Mg_Total'] = df['Elemental_Mg_Total'] * df['Absorb_Coeff']
-df['PPAA'] = df['Total_Cost'] / df['Absorbed_Mg_Total']
+
+# Step 1: Total Raw Substance (Total units * Amount per unit)
+df['Total_Raw_Amount'] = df['Units_Total'] * df['Amount_per_Unit']
+
+# Step 2: Total Elemental Substance (Skeptic Filter)
+df['Elemental_Amount_Total'] = df['Total_Raw_Amount'] * df['Yield_Coeff']
+df['Cost_per_Elemental'] = df['Total_Cost'] / df['Elemental_Amount_Total']
+
+# Step 3: Actually Absorbed Amount (Expert Filter)
+df['Absorbed_Amount_Total'] = df['Elemental_Amount_Total'] * df['Absorb_Coeff']
+df['PPAA'] = df['Total_Cost'] / df['Absorbed_Amount_Total']
 
 # --- UI SETTINGS ---
 st.title("🧬 Bio-Value Strategy Engine")
 
-# Sidebar
+# Sidebar navigation
 st.sidebar.header("Navigation")
 if 'Category' in df.columns:
-    category = st.sidebar.selectbox("Select Supplement:", df['Category'].unique())
+    cat_list = df['Category'].unique()
+    category = st.sidebar.selectbox("Select Supplement Category:", cat_list)
     df_filtered = df[df['Category'] == category]
 else:
+    category = "Supplements"
     df_filtered = df
 
-# THE THREE-LEVEL LOGIC
 view_mode = st.sidebar.radio(
     "Optimization Level:",
     [
@@ -62,26 +67,29 @@ view_mode = st.sidebar.radio(
     ]
 )
 
-# Sorting and Feedback based on level
+# Sorting logic
 if "1." in view_mode:
     df_sorted = df_filtered.sort_values('Total_Cost')
-    st.info("Level 1: Products sorted by shelf price. This is how most people shop.")
+    st.info(f"Level 1: {category} sorted by shelf price. Standard retail view.")
 elif "2." in view_mode:
-    df_sorted = df_filtered.sort_values('Price_Per_Elemental_Mg')
-    st.warning("Level 2: Sorted by price per elemental mg. This filters out fillers but ignores biology.")
+    df_sorted = df_filtered.sort_values('Cost_per_Elemental')
+    st.warning(f"Level 2: {category} sorted by cost per elemental mg. Filtering fillers.")
 else:
     df_sorted = df_filtered.sort_values('PPAA')
-    st.success("Level 3: Optimized for actual cellular absorption. This is the ultimate Bio-Value.")
+    st.success(f"Level 3: {category} sorted by actual absorption. Maximum Bio-Value.")
 
-# --- DISPLAY ---
+# --- DISPLAY TABLE ---
 st.data_editor(
-    df_sorted[['Brand', 'Form', 'Total_Cost', 'Price_Per_Elemental_Mg', 'PPAA', 'Notes', 'URL']],
+    df_sorted[['Brand', 'Form', 'Total_Cost', 'Cost_per_Elemental', 'PPAA', 'Notes', 'URL']],
     column_config={
         "Total_Cost": st.column_config.NumberColumn("Shelf Price (€)", format="%.2f"),
-        "Price_Per_Elemental_Mg": st.column_config.NumberColumn("Cost/Elemental mg", format="%.4f €"),
+        "Cost_per_Elemental": st.column_config.NumberColumn("Cost/Elemental mg", format="%.4f €"),
         "PPAA": st.column_config.NumberColumn("Real Cost (PPAA)", format="%.4f €"),
         "URL": st.column_config.LinkColumn("Purchase", display_text="View Store")
     },
     hide_index=True,
     use_container_width=True
 )
+
+st.write("---")
+st.caption("Bio-Value Engine | Scaling nutrition transparency through mathematics.")
