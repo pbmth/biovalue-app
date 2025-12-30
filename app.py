@@ -1,95 +1,88 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Bio-Value Engine", layout="wide")
+# CONFIGURATION
+st.set_page_config(page_title="Bio-Value Supplement Analyzer", layout="wide")
 
-# --- DATA LOADING ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS_D60I8P9Qh7zH_7L6_Vn4YgN4W4v9G7_G6v4v/pub?output=csv"
+# 1. PASTE YOUR GOOGLE SHEETS CSV LINK HERE
+SHEET_URL = "YOUR_CSV_LINK_HERE"
 
-@st.cache_data(ttl=60) 
-def load_data():
+@st.cache_data
+def load_data(url):
     try:
-        df = pd.read_csv(SHEET_URL)
+        # Load data and strip whitespace from column headers
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip()
         return df
-    except:
-        # Placeholder data logic
-        data = {
-            'Category': ['Magnesium', 'Creatine'],
-            'Brand': ['Thorne', 'BulkPowders'],
-            'Form': ['Bisglycinate', 'Monohydrate'],
-            'Unit_Type': ['Capsule', 'Gram'],
-            'Price_Bottle': [40.00, 25.00],
-            'Shipping': [0.00, 5.00],
-            'Units_Total': [60, 500],
-            'Amount_per_Unit': [200, 1000],
-            'Yield_Coeff': [1.0, 0.88],
-            'Absorb_Coeff': [0.45, 0.99],
-            'Notes': ['Premium', 'Best Seller'],
-            'URL': ['#', '#']
-        }
-        return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return None
 
-df = load_data()
+df = load_data(SHEET_URL)
 
-# --- CALCULATIONS (Universal Logic) ---
-df['Total_Cost'] = df['Price_Bottle'] + df['Shipping']
+if df is not None:
+    st.title("🦈 Shark Bio-Value Supplement Analyzer")
+    st.write("Exposing the true biological value of supplements by cutting through marketing noise.")
 
-# Step 1: Total Raw Substance (Total units * Amount per unit)
-df['Total_Raw_Amount'] = df['Units_Total'] * df['Amount_per_Unit']
+    # --- CALCULATION ENGINE ---
+    # Calculating total price, elemental amount, and absorbed amount
+    df['Total_Price'] = df['Price_Bottle'] + df['Shipping']
+    df['Elemental_Amount_mg'] = df['Units_Total'] * df['Amount_per_Unit'] * df['Yield_Coeff']
+    df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * df['Absorb_Coeff']
+    
+    # PPAA (Price Per Absorbed Amount) - Cost of 1 gram of absorbed substance
+    df['PPAA_1g_Absorbed'] = (df['Total_Price'] / df['Absorbed_Amount_mg']) * 1000
 
-# Step 2: Total Elemental Substance (Skeptic Filter)
-df['Elemental_Amount_Total'] = df['Total_Raw_Amount'] * df['Yield_Coeff']
-df['Cost_per_Elemental'] = df['Total_Cost'] / df['Elemental_Amount_Total']
+    # --- SIDEBAR FILTERS ---
+    st.sidebar.header("Analysis Settings")
+    category = st.sidebar.selectbox("Select Category", df['Category'].unique())
+    view_level = st.sidebar.radio("Analysis Depth (Complexity)", 
+                                 ["Level 1: Shelf Price", 
+                                  "Level 2: Elemental ROI", 
+                                  "Level 3: Shark Bio-Value (PPAA)"])
 
-# Step 3: Actually Absorbed Amount (Expert Filter)
-df['Absorbed_Amount_Total'] = df['Elemental_Amount_Total'] * df['Absorb_Coeff']
-df['PPAA'] = df['Total_Cost'] / df['Absorbed_Amount_Total']
+    filtered_df = df[df['Category'] == category].copy()
 
-# --- UI SETTINGS ---
-st.title("🧬 Bio-Value Strategy Engine")
+    # --- SORTING LOGIC ---
+    if "Level 1" in view_level:
+        sort_col = 'Total_Price'
+        ascending = True
+        st.subheader(f"Level 1: Cheapest Products on Shelf ({category})")
+    elif "Level 2" in view_level:
+        filtered_df['Price_per_Elemental_Gram'] = (filtered_df['Total_Price'] / (filtered_df['Elemental_Amount_mg'] / 1000))
+        sort_col = 'Price_per_Elemental_Gram'
+        ascending = True
+        st.subheader(f"Level 2: Best Price per Elemental Gram ({category})")
+    else:
+        sort_col = 'PPAA_1g_Absorbed'
+        ascending = True
+        st.subheader(f"🦈 Level 3: Shark Bio-Value - Cost per Absorbed Gram ({category})")
 
-# Sidebar navigation
-st.sidebar.header("Navigation")
-if 'Category' in df.columns:
-    cat_list = df['Category'].unique()
-    category = st.sidebar.selectbox("Select Supplement Category:", cat_list)
-    df_filtered = df[df['Category'] == category]
+    final_df = filtered_df.sort_values(by=sort_col, ascending=ascending)
+
+    # --- DATA DISPLAY ---
+    # Selecting columns to display based on the selected level
+    display_cols = ['Brand', 'Form', 'Total_Price', 'Notes']
+    if "Level 3" in view_level:
+        display_cols.insert(3, 'PPAA_1g_Absorbed')
+    
+    st.dataframe(final_df[display_cols].style.format({
+        'Total_Price': '${:.2f}',
+        'PPAA_1g_Absorbed': '${:.3f}/g'
+    }), use_container_width=True)
+
+    # --- SHARK STRATEGIC ANALYSIS ---
+    st.divider()
+    best_product = final_df.iloc[0]
+    worst_product = final_df.iloc[-1]
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.success(f"✅ **TOP PICK:** {best_product['Brand']} ({best_product['Form']})")
+        st.write(f"This product offers the lowest cost per milligram of biologically available active ingredient.")
+    with col2:
+        st.error(f"❌ **POOR DEAL:** {worst_product['Brand']} ({worst_product['Form']})")
+        st.write(f"This product's price is misleading. The absorbed gram is {worst_product[sort_col] / best_product[sort_col]:.1f}x more expensive than the top pick.")
+
 else:
-    category = "Supplements"
-    df_filtered = df
-
-view_mode = st.sidebar.radio(
-    "Optimization Level:",
-    [
-        "1. Market Price (Basic)", 
-        "2. Elemental ROI (Skeptic)", 
-        "3. Expert Bio-Value (PPAA)"
-    ]
-)
-
-# Sorting logic
-if "1." in view_mode:
-    df_sorted = df_filtered.sort_values('Total_Cost')
-    st.info(f"Level 1: {category} sorted by shelf price. Standard retail view.")
-elif "2." in view_mode:
-    df_sorted = df_filtered.sort_values('Cost_per_Elemental')
-    st.warning(f"Level 2: {category} sorted by cost per elemental mg. Filtering fillers.")
-else:
-    df_sorted = df_filtered.sort_values('PPAA')
-    st.success(f"Level 3: {category} sorted by actual absorption. Maximum Bio-Value.")
-
-# --- DISPLAY TABLE ---
-st.data_editor(
-    df_sorted[['Brand', 'Form', 'Total_Cost', 'Cost_per_Elemental', 'PPAA', 'Notes', 'URL']],
-    column_config={
-        "Total_Cost": st.column_config.NumberColumn("Shelf Price (€)", format="%.2f"),
-        "Cost_per_Elemental": st.column_config.NumberColumn("Cost/Elemental mg", format="%.4f €"),
-        "PPAA": st.column_config.NumberColumn("Real Cost (PPAA)", format="%.4f €"),
-        "URL": st.column_config.LinkColumn("Purchase", display_text="View Store")
-    },
-    hide_index=True,
-    use_container_width=True
-)
-
-st.write("---")
-st.caption("Bio-Value Engine | Scaling nutrition transparency through mathematics.")
+    st.info("Awaiting connection to Google Sheets data...")
