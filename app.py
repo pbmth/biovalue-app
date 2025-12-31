@@ -4,14 +4,14 @@ import pandas as pd
 # CONFIGURATION
 st.set_page_config(page_title="Bio-Value Supplement Analyzer", layout="wide")
 
-# 1. PASTE YOUR GOOGLE SHEETS CSV LINK HERE
+# 1. YOUR GOOGLE SHEETS CSV LINK
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmALzKWrd24C6mKxgOGvjTmfGTGWTH6gTa_vPWg5CQzV2uDVcd7WFrKCquLmkPoNKPN099PrPCKytN/pub?gid=0&single=true&output=csv"
 
 @st.cache_data(ttl=1)
 def load_data(url):
     try:
-        # Load data and strip whitespace from column headers
         df = pd.read_csv(url)
+        # Clean column names (remove hidden spaces)
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
@@ -20,69 +20,82 @@ def load_data(url):
 
 df = load_data(SHEET_URL)
 
+# Safety check for when you haven't added the 'Target_Area' column to Sheets yet
+if df is not None and 'Target_Area' not in df.columns:
+    df['Target_Area'] = 'General'
+
 if df is not None:
     st.title("🦈 Shark Bio-Value Supplement Analyzer")
-    st.write("Exposing the true biological value of supplements by cutting through marketing noise.")
+    st.write("Exposing the true biological value of supplements by segmenting them by their specific targets.")
 
     # --- CALCULATION ENGINE ---
-    # Calculating total price, elemental amount, and absorbed amount
-    df['Total_Price'] = df['Price_Bottle'] + df['Shipping']
+    # Convert potential string numbers to floats and calculate
+    df['Total_Price'] = pd.to_numeric(df['Price_Bottle'], errors='coerce') + pd.to_numeric(df['Shipping'], errors='coerce')
     df['Elemental_Amount_mg'] = df['Units_Total'] * df['Amount_per_Unit'] * df['Yield_Coeff']
     df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * df['Absorb_Coeff']
     
-    # PPAA (Price Per Absorbed Amount) - Cost of 1 gram of absorbed substance
+    # Cost per 1 gram (1000mg) of absorbed active ingredient
     df['PPAA_1g_Absorbed'] = (df['Total_Price'] / df['Absorbed_Amount_mg']) * 1000
 
     # --- SIDEBAR FILTERS ---
-    st.sidebar.header("Analysis Settings")
-    category = st.sidebar.selectbox("Select Category", df['Category'].unique())
-    view_level = st.sidebar.radio("Analysis Depth (Complexity)", 
+    st.sidebar.header("Filter & Analyze")
+    
+    # Filter 1: Supplement Category
+    category = st.sidebar.selectbox("Select Supplement Type", df['Category'].unique())
+    filtered_cat = df[df['Category'] == category].copy()
+    
+    # Filter 2: Target Area (Brain, Muscle, etc.)
+    target_options = ["All Targets"] + sorted(list(filtered_cat['Target_Area'].unique()))
+    target_filter = st.sidebar.selectbox("Select Target Area", target_options)
+
+    # Filter 3: Complexity Level
+    view_level = st.sidebar.radio("Analysis Depth", 
                                  ["Level 1: Shelf Price", 
                                   "Level 2: Elemental ROI", 
                                   "Level 3: Shark Bio-Value (PPAA)"])
 
-    filtered_df = df[df['Category'] == category].copy()
+    # Apply filters to the dataframe
+    if target_filter != "All Targets":
+        final_filtered = filtered_cat[filtered_cat['Target_Area'] == target_filter].copy()
+    else:
+        final_filtered = filtered_cat.copy()
 
     # --- SORTING LOGIC ---
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
-        ascending = True
-        st.subheader(f"Level 1: Cheapest Products on Shelf ({category})")
+        st.subheader(f"Level 1: Cheapest {category} for {target_filter}")
     elif "Level 2" in view_level:
-        filtered_df['Price_per_Elemental_Gram'] = (filtered_df['Total_Price'] / (filtered_df['Elemental_Amount_mg'] / 1000))
+        final_filtered['Price_per_Elemental_Gram'] = (final_filtered['Total_Price'] / (final_filtered['Elemental_Amount_mg'] / 1000))
         sort_col = 'Price_per_Elemental_Gram'
-        ascending = True
-        st.subheader(f"Level 2: Best Price per Elemental Gram ({category})")
+        st.subheader(f"Level 2: Best Elemental ROI for {target_filter}")
     else:
         sort_col = 'PPAA_1g_Absorbed'
-        ascending = True
-        st.subheader(f"🦈 Level 3: Shark Bio-Value - Cost per Absorbed Gram ({category})")
+        st.subheader(f"🦈 Level 3: {target_filter} Value Leader (Cost per Absorbed Gram)")
 
-    final_df = filtered_df.sort_values(by=sort_col, ascending=ascending)
+    # Sort the data
+    final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
     # --- DATA DISPLAY ---
-    # Selecting columns to display based on the selected level
-    display_cols = ['Brand', 'Form', 'Total_Price', 'Notes']
+    # Columns to show
+    display_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price', 'Notes']
     if "Level 3" in view_level:
-        display_cols.insert(3, 'PPAA_1g_Absorbed')
+        display_cols.insert(4, 'PPAA_1g_Absorbed')
     
+    # Format currency
     st.dataframe(final_df[display_cols].style.format({
         'Total_Price': '${:.2f}',
-        'PPAA_1g_Absorbed': '${:.3f}/g'
+        'PPAA_1g_Absorbed': '${:.3f}/g',
+        'Price_per_Elemental_Gram': '${:.3f}/g'
     }), use_container_width=True)
 
     # --- SHARK STRATEGIC ANALYSIS ---
-    st.divider()
-    best_product = final_df.iloc[0]
-    worst_product = final_df.iloc[-1]
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.success(f"✅ **TOP PICK:** {best_product['Brand']} ({best_product['Form']})")
-        st.write(f"This product offers the lowest cost per milligram of biologically available active ingredient.")
-    with col2:
-        st.error(f"❌ **POOR DEAL:** {worst_product['Brand']} ({worst_product['Form']})")
-        st.write(f"This product's price is misleading. The absorbed gram is {worst_product[sort_col] / best_product[sort_col]:.1f}x more expensive than the top pick.")
+    if len(final_df) > 0:
+        st.divider()
+        best_product = final_df.iloc[0]
+        st.success(f"🏆 **CATEGORY LEADER for {target_filter}:** {best_product['Brand']} ({best_product['Form']})")
+        st.info(f"**Shark Insight:** When targeting **{best_product['Target_Area']}**, this product provides the most efficient absorption for your investment.")
+    else:
+        st.warning("No products found for this specific filter combination.")
 
 else:
     st.info("Awaiting connection to Google Sheets data...")
