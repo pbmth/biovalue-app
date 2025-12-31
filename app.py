@@ -7,7 +7,7 @@ st.set_page_config(page_title="Bio-Value Supplement Analyzer", layout="wide")
 # 1. PASTE YOUR GOOGLE SHEETS CSV LINK HERE
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmALzKWrd24C6mKxgOGvjTmfGTGWTH6gTa_vPWg5CQzV2uDVcd7WFrKCquLmkPoNKPN099PrPCKytN/pub?gid=0&single=true&output=csv"
 
-@st.cache_data
+@st.cache_data(ttl=1)
 def load_data(url):
     try:
         # Load data and strip whitespace from column headers
