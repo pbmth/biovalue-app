@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # CONFIGURATION
-st.set_page_config(page_title="Bio-Value Supplement Analyzer", layout="wide")
+st.set_page_config(page_title="Shark Bio-Value Analyzer", layout="wide")
 
 # 1. YOUR GOOGLE SHEETS CSV LINK
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmALzKWrd24C6mKxgOGvjTmfGTGWTH6gTa_vPWg5CQzV2uDVcd7WFrKCquLmkPoNKPN099PrPCKytN/pub?gid=0&single=true&output=csv"
@@ -19,10 +19,6 @@ def load_data(url):
 
 df = load_data(SHEET_URL)
 
-# Safety check for Target_Area
-if df is not None and 'Target_Area' not in df.columns:
-    df['Target_Area'] = 'General'
-
 if df is not None:
     st.title("🦈 Shark Bio-Value Supplement Analyzer")
     
@@ -38,41 +34,45 @@ if df is not None:
     category = st.sidebar.selectbox("Select Supplement Type", df['Category'].unique())
     filtered_cat = df[df['Category'] == category].copy()
     
-    target_options = ["All Targets"] + sorted(list(filtered_cat['Target_Area'].unique()))
-    target_filter = st.sidebar.selectbox("Select Target Area", target_options)
+    # SMART TAG SYSTEM (split by '/')
+    all_targets = set()
+    for t in filtered_cat['Target_Area'].dropna().unique():
+        parts = [p.strip() for p in str(t).split('/')]
+        all_targets.update(parts)
+    
+    # Vaikimisi valik on "General Health", mis näitab kõike
+    target_options = ["General Health"] + sorted(list(all_targets))
+    target_filter = st.sidebar.selectbox("Select Target Area (Purpose)", target_options)
 
     view_level = st.sidebar.radio("Analysis Depth", 
                                  ["Level 1: Shelf Price", 
                                   "Level 2: Elemental ROI", 
                                   "Level 3: Shark Bio-Value (PPAA)"])
 
-    if target_filter != "All Targets":
-        final_filtered = filtered_cat[filtered_cat['Target_Area'] == target_filter].copy()
-    else:
+    # FILTREERIMISE LOOGIKA: "General Health" näitab kõike, muud filtrid on spetsiifilised
+    if target_filter == "General Health":
         final_filtered = filtered_cat.copy()
+    else:
+        final_filtered = filtered_cat[filtered_cat['Target_Area'].str.contains(target_filter, na=False)].copy()
 
-    # --- SORTING LOGIC & DESCRIPTIONS ---
+    # --- DESCRIPTION ---
     st.divider()
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
-        st.subheader(f"Level 1: Comparison by Shelf Price ({target_filter})")
-        st.write("💡 **Current Consumer Behavior:** This is how most people shop. They look at the price tag on the shelf, unaware of the actual mineral content or how much their body will actually absorb.")
+        st.write("💡 **Level 1 (Shelf Price):** Comparing prices as seen on the shelf. Does not account for dosage or quality.")
     elif "Level 2" in view_level:
         sort_col = 'Price_per_Elemental_Gram'
-        st.subheader(f"Level 2: Comparison by Elemental ROI ({target_filter})")
-        st.write("🔍 **The Smart Buyer View:** This level reveals the cost of the raw mineral. It exposes 'cheap' bottles that are actually expensive because they contain very little active ingredient.")
+        st.write("🔍 **Level 2 (Elemental ROI):** Shows the price of the raw active ingredient before absorption.")
     else:
         sort_col = 'PPAA_1g_Absorbed'
-        st.subheader(f"🦈 Level 3: Comparison by Shark Bio-Value ({target_filter})")
-        st.write("🚀 **The Expert/Shark View:** The ultimate analysis. This calculates the price of what *actually* enters your bloodstream, accounting for yield and bioavailability. This is the only way to find the true winner.")
+        st.write("🚀 **Level 3 (Shark Bio-Value):** The absolute truth. Cost per gram of ingredient that actually reaches your system.")
 
     final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
-    # --- DATA DISPLAY LOGIC ---
+    # --- DATA DISPLAY ---
     display_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price']
-    if "Level 2" in view_level:
-        display_cols.append('Price_per_Elemental_Gram')
-    if "Level 3" in view_level:
+    if "Level 2" in view_level: display_cols.append('Price_per_Elemental_Gram')
+    if "Level 3" in view_level: 
         display_cols.append('PPAA_1g_Absorbed')
         display_cols.append('Notes')
     display_cols.append('URL')
@@ -81,20 +81,19 @@ if df is not None:
         final_df[display_cols],
         column_config={
             "URL": st.column_config.LinkColumn("Buy Now", display_text="Go to Store"),
-            "Total_Price": st.column_config.NumberColumn("Total Price", format="$%.2f"),
-            "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elemental Gram", format="$%.3f/g"),
-            "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorbed Gram", format="$%.3f/g"),
-            "Notes": st.column_config.TextColumn("Expert Notes", width="large"),
+            "Total_Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+            "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elem. g", format="$%.3f/g"),
+            "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorb. g", format="$%.3f/g"),
         },
         use_container_width=True, hide_index=True
     )
 
     # --- SMART SHARK ANALYSIS ---
-    if len(final_filtered) > 0:
+    if not final_filtered.empty:
         st.divider()
         shark_winner = final_filtered.sort_values(by='PPAA_1g_Absorbed', ascending=True).iloc[0]
-        st.success(f"🏆 **SHARK'S CHOICE:** {shark_winner['Brand']} ({shark_winner['Form']})")
-        st.info(f"**Shark Insight:** Regardless of the shelf price, **{shark_winner['Brand']}** provides the best mathematical value for **{shark_winner['Target_Area']}** because of its superior absorption and yield.")
+        st.success(f"🏆 **SHARK'S CHOICE for {target_filter}:** {shark_winner['Brand']} ({shark_winner['Form']})")
+        st.info(f"**Shark Insight:** Based on mathematical data, this is the most efficient way to invest in your health for this specific goal.")
 
 else:
     st.info("Awaiting connection to Google Sheets data...")
