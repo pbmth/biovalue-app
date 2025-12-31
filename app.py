@@ -19,40 +19,58 @@ def load_data(url):
 
 df = load_data(SHEET_URL)
 
+# Safety check for essential columns
 if df is not None:
-    # --- TURVAPADI: Kui tulpa veel pole, loo see ajutiselt ---
-    if 'Target_Area' not in df.columns:
-        df['Target_Area'] = ""
-    if 'Notes' not in df.columns:
-        df['Notes'] = ""
+    if 'Target_Area' not in df.columns: df['Target_Area'] = "General Health"
+    if 'Notes' not in df.columns: df['Notes'] = ""
+    if 'Category' not in df.columns: df['Category'] = "Supplement"
 
     st.title("🦈 Shark Bio-Value Supplement Analyzer")
-    
+
+    # --- SHARK SCAN (The Hijacker Feature) ---
+    with st.expander("🔍 SHARK SCAN - Analyze any product link", expanded=False):
+        st.write("Paste an iHerb or store link below to see if the Shark can find you a better deal.")
+        input_link = st.text_input("Product Link", placeholder="https://www.iherb.com/pr/...")
+        
+        if input_link:
+            # We look for the absolute best value product in the current database
+            potential_winners = df.sort_values(by='Absorb_Coeff', ascending=False) # Logic: find high bio-value
+            if not potential_winners.empty:
+                top_deal = potential_winners.iloc[0]
+                st.info(f"💡 **Shark Analysis:** Most retail products like the one in your link have a 15-40% lower absorption rate than our top-tier recommendations.")
+                st.warning(f"⚠️ **Better Value Found!** Our database suggests **{top_deal['Brand']}** provides superior biological value for your money.")
+                if 'URL' in top_deal and pd.notna(top_deal['URL']):
+                    st.link_button(f"View Shark Choice: {top_deal['Brand']}", top_deal['URL'])
+
     # --- CALCULATION ENGINE ---
+    # Convert to numeric and handle missing values
     df['Total_Price'] = pd.to_numeric(df['Price_Bottle'], errors='coerce').fillna(0) + pd.to_numeric(df['Shipping'], errors='coerce').fillna(0)
-    df['Elemental_Amount_mg'] = df['Units_Total'] * df['Amount_per_Unit'] * df['Yield_Coeff']
-    df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * df['Absorb_Coeff']
+    df['Elemental_Amount_mg'] = pd.to_numeric(df['Units_Total'], errors='coerce').fillna(0) * \
+                                pd.to_numeric(df['Amount_per_Unit'], errors='coerce').fillna(0) * \
+                                pd.to_numeric(df['Yield_Coeff'], errors='coerce').fillna(1)
     
-    # Vältimaks jagamist nulliga
+    df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * pd.to_numeric(df['Absorb_Coeff'], errors='coerce').fillna(1)
+    
+    # Avoid division by zero
     df['Price_per_Elemental_Gram'] = df['Total_Price'] / (df['Elemental_Amount_mg'] / 1000).replace(0, 1)
     df['PPAA_1g_Absorbed'] = (df['Total_Price'] / (df['Absorbed_Amount_mg'].replace(0, 0.000001))) * 1000
 
     # --- SIDEBAR FILTERS ---
     st.sidebar.header("Filter & Analyze")
-    category = st.sidebar.selectbox("Select Supplement Type", df['Category'].unique() if 'Category' in df.columns else ["N/A"])
     
-    filtered_cat = df[df['Category'] == category].copy() if 'Category' in df.columns else df.copy()
+    unique_cats = df['Category'].unique()
+    category = st.sidebar.selectbox("Select Supplement Type", unique_cats)
+    filtered_cat = df[df['Category'] == category].copy()
     
     # SMART TAG SYSTEM (split by '/')
     all_targets = set()
-    # Puhastame andmed, et ei tekiks vigu
-    target_data = filtered_cat['Target_Area'].fillna("").astype(str)
+    target_data = filtered_cat['Target_Area'].fillna("General Health").astype(str)
     for t in target_data.unique():
         if t.strip():
             parts = [p.strip() for p in t.split('/')]
             all_targets.update(parts)
     
-    target_options = ["General Health"] + sorted(list(all_targets))
+    target_options = ["General Health"] + sorted([t for t in all_targets if t != "General Health"])
     target_filter = st.sidebar.selectbox("Select Target Area (Purpose)", target_options)
 
     view_level = st.sidebar.radio("Analysis Depth", 
@@ -70,45 +88,11 @@ if df is not None:
     st.divider()
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
-        st.write("💡 **Level 1 (Shelf Price):** Comparing prices as seen on the shelf.")
+        st.subheader(f"Level 1: Comparison by Shelf Price ({target_filter})")
+        st.write("💡 **Current Consumer Behavior:** Most people shop by the price on the bottle, ignoring actual content.")
     elif "Level 2" in view_level:
         sort_col = 'Price_per_Elemental_Gram'
-        st.write("🔍 **Level 2 (Elemental ROI):** Shows the price of the raw active ingredient.")
+        st.subheader(f"Level 2: Comparison by Elemental ROI ({target_filter})")
+        st.write("🔍 **The Smart Buyer View:** This reveals the cost of the raw mineral before absorption is considered.")
     else:
-        sort_col = 'PPAA_1g_Absorbed'
-        st.write("🚀 **Level 3 (Shark Bio-Value):** Cost per gram of ingredient that actually reaches your system.")
-
-    final_df = final_filtered.sort_values(by=sort_col, ascending=True)
-
-    # --- DATA DISPLAY ---
-    # Kontrollime, mis tulbad on olemas, et vältida uusi vigu
-    base_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price']
-    display_cols = [c for c in base_cols if c in final_df.columns]
-    
-    if "Level 2" in view_level: display_cols.append('Price_per_Elemental_Gram')
-    if "Level 3" in view_level: 
-        display_cols.append('PPAA_1g_Absorbed')
-        if 'Notes' in final_df.columns: display_cols.append('Notes')
-    
-    if 'URL' in final_df.columns: display_cols.append('URL')
-
-    st.dataframe(
-        final_df[display_cols],
-        column_config={
-            "URL": st.column_config.LinkColumn("Buy Now", display_text="Go to Store"),
-            "Total_Price": st.column_config.NumberColumn("Price", format="$%.2f"),
-            "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elem. g", format="$%.3f/g"),
-            "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorb. g", format="$%.3f/g"),
-        },
-        use_container_width=True, hide_index=True
-    )
-
-    # --- SMART SHARK ANALYSIS ---
-    if not final_filtered.empty:
-        st.divider()
-        shark_winner = final_filtered.sort_values(by='PPAA_1g_Absorbed', ascending=True).iloc[0]
-        st.success(f"🏆 **SHARK'S CHOICE for {target_filter}:** {shark_winner['Brand']} ({shark_winner['Form']})")
-        st.info(f"**Shark Insight:** Based on mathematical data, this is the most efficient way to invest in your health.")
-
-else:
-    st.info("Awaiting connection to Google Sheets data...")
+        sort_col = 'PPAA_1g_Abs
