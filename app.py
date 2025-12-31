@@ -31,10 +31,10 @@ if df is not None:
     df['Elemental_Amount_mg'] = df['Units_Total'] * df['Amount_per_Unit'] * df['Yield_Coeff']
     df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * df['Absorb_Coeff']
     
-    # Cost per 1g of elemental substance (Level 2)
+    # Level 2 Calculation
     df['Price_per_Elemental_Gram'] = (df['Total_Price'] / (df['Elemental_Amount_mg'] / 1000))
     
-    # Cost per 1g of absorbed substance (Level 3 - PPAA)
+    # Level 3 Calculation (PPAA)
     df['PPAA_1g_Absorbed'] = (df['Total_Price'] / df['Absorbed_Amount_mg']) * 1000
 
     # --- SIDEBAR FILTERS ---
@@ -70,7 +70,7 @@ if df is not None:
     final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
     # --- DATA DISPLAY ---
-    # We use column configuration to make the URL a clickable button
+    # Define columns to display (Added Notes back)
     display_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price']
     
     if "Level 2" in view_level:
@@ -78,7 +78,7 @@ if df is not None:
     if "Level 3" in view_level:
         display_cols.append('PPAA_1g_Absorbed')
     
-    display_cols.append('URL') # Add URL at the end
+    display_cols.extend(['Notes', 'URL']) # Notes and URL at the end
 
     st.dataframe(
         final_df[display_cols],
@@ -87,17 +87,21 @@ if df is not None:
             "Total_Price": st.column_config.NumberColumn("Total Price", format="$%.2f"),
             "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elemental Gram", format="$%.3f/g"),
             "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorbed Gram", format="$%.3f/g"),
+            "Notes": st.column_config.TextColumn("Notes", width="medium"),
         },
         use_container_width=True,
         hide_index=True
     )
 
-    # --- SHARK STRATEGIC ANALYSIS ---
+    # --- SHARK STRATEGIC ANALYSIS (Improved Insight) ---
     if len(final_df) > 0:
         st.divider()
         best_product = final_df.iloc[0]
         st.success(f"🏆 **CATEGORY LEADER for {target_filter}:** {best_product['Brand']} ({best_product['Form']})")
-        st.info(f"**Shark Insight:** This product provides the most efficient investment for your health target.")
+        
+        # Shark Insight now clearly mentions the brand name
+        st.info(f"**Shark Insight on {best_product['Brand']}:** This product is your optimal choice for **{best_product['Target_Area']}**. "
+                f"It delivers the highest biological value per dollar spent compared to all other options in this category.")
     else:
         st.warning("No products found for this specific filter.")
 
