@@ -19,7 +19,7 @@ def load_data(url):
 
 df = load_data(SHEET_URL)
 
-# Safety check for Target_Area column
+# Safety check for Target_Area
 if df is not None and 'Target_Area' not in df.columns:
     df['Target_Area'] = 'General'
 
@@ -30,12 +30,9 @@ if df is not None:
     df['Total_Price'] = pd.to_numeric(df['Price_Bottle'], errors='coerce') + pd.to_numeric(df['Shipping'], errors='coerce')
     df['Elemental_Amount_mg'] = df['Units_Total'] * df['Amount_per_Unit'] * df['Yield_Coeff']
     df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * df['Absorb_Coeff']
-    
-    # Level 2 Calculation
     df['Price_per_Elemental_Gram'] = (df['Total_Price'] / (df['Elemental_Amount_mg'] / 1000))
-    
-    # Level 3 Calculation (PPAA)
-    df['PPAA_1g_Absorbed'] = (df['Total_Price'] / df['Absorbed_Amount_mg']) * 1000
+    # Added small epsilon to avoid division by zero
+    df['PPAA_1g_Absorbed'] = (df['Total_Price'] / (df['Absorbed_Amount_mg'] + 0.000001)) * 1000
 
     # --- SIDEBAR FILTERS ---
     st.sidebar.header("Filter & Analyze")
@@ -50,7 +47,6 @@ if df is not None:
                                   "Level 2: Elemental ROI", 
                                   "Level 3: Shark Bio-Value (PPAA)"])
 
-    # Apply filters
     if target_filter != "All Targets":
         final_filtered = filtered_cat[filtered_cat['Target_Area'] == target_filter].copy()
     else:
@@ -59,26 +55,27 @@ if df is not None:
     # --- SORTING LOGIC ---
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
-        st.subheader(f"Level 1: Cheapest {category} for {target_filter}")
+        st.subheader(f"Level 1: Comparison by Shelf Price ({target_filter})")
     elif "Level 2" in view_level:
         sort_col = 'Price_per_Elemental_Gram'
-        st.subheader(f"Level 2: Best Elemental ROI for {target_filter}")
+        st.subheader(f"Level 2: Comparison by Elemental ROI ({target_filter})")
     else:
         sort_col = 'PPAA_1g_Absorbed'
-        st.subheader(f"🦈 Level 3: {target_filter} Value Leader (Cost per Absorbed Gram)")
+        st.subheader(f"🦈 Level 3: Comparison by Shark Bio-Value ({target_filter})")
 
     final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
-    # --- DATA DISPLAY ---
-    # Define columns to display (Added Notes back)
+    # --- DATA DISPLAY LOGIC (Dynamic Columns) ---
     display_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price']
     
     if "Level 2" in view_level:
         display_cols.append('Price_per_Elemental_Gram')
+    
     if "Level 3" in view_level:
         display_cols.append('PPAA_1g_Absorbed')
+        display_cols.append('Notes') # Notes appears ONLY in Level 3
     
-    display_cols.extend(['Notes', 'URL']) # Notes and URL at the end
+    display_cols.append('URL') # URL is always at the end
 
     st.dataframe(
         final_df[display_cols],
@@ -87,23 +84,15 @@ if df is not None:
             "Total_Price": st.column_config.NumberColumn("Total Price", format="$%.2f"),
             "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elemental Gram", format="$%.3f/g"),
             "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorbed Gram", format="$%.3f/g"),
-            "Notes": st.column_config.TextColumn("Notes", width="medium"),
+            "Notes": st.column_config.TextColumn("Expert Notes", width="large"),
         },
-        use_container_width=True,
-        hide_index=True
+        use_container_width=True, hide_index=True
     )
 
-    # --- SHARK STRATEGIC ANALYSIS (Improved Insight) ---
-    if len(final_df) > 0:
+    # --- SMART SHARK ANALYSIS ---
+    if len(final_filtered) > 0:
         st.divider()
-        best_product = final_df.iloc[0]
-        st.success(f"🏆 **CATEGORY LEADER for {target_filter}:** {best_product['Brand']} ({best_product['Form']})")
+        shark_winner = final_filtered.sort_values(by='PPAA_1g_Absorbed', ascending=True).iloc[0]
         
-        # Shark Insight now clearly mentions the brand name
-        st.info(f"**Shark Insight on {best_product['Brand']}:** This product is your optimal choice for **{best_product['Target_Area']}**. "
-                f"It delivers the highest biological value per dollar spent compared to all other options in this category.")
-    else:
-        st.warning("No products found for this specific filter.")
-
-else:
-    st.info("Awaiting connection to Google Sheets data...")
+        st.success(f"🏆 **SHARK'S CHOICE:** {shark_winner['Brand']} ({shark_winner['Form']})")
+        st.info(f"**Shark Insight:** Regardless of the shelf price, **{shark_winner['Brand']}** provides the best mathematical value for **{shark_winner['Target_Area']}** because of its superior absorption and yield.")
