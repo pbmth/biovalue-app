@@ -33,17 +33,15 @@ if df is not None:
         input_link = st.text_input("Product Link", placeholder="https://www.iherb.com/pr/...")
         
         if input_link:
-            # We look for the absolute best value product in the current database
-            potential_winners = df.sort_values(by='Absorb_Coeff', ascending=False) # Logic: find high bio-value
+            potential_winners = df.sort_values(by='Absorb_Coeff', ascending=False)
             if not potential_winners.empty:
                 top_deal = potential_winners.iloc[0]
                 st.info(f"💡 **Shark Analysis:** Most retail products like the one in your link have a 15-40% lower absorption rate than our top-tier recommendations.")
-                st.warning(f"⚠️ **Better Value Found!** Our database suggests **{top_deal['Brand']}** provides superior biological value for your money.")
+                st.warning(f"⚠️ **Better Value Found!** Our database suggests **{top_deal['Brand']}** provides superior biological value.")
                 if 'URL' in top_deal and pd.notna(top_deal['URL']):
                     st.link_button(f"View Shark Choice: {top_deal['Brand']}", top_deal['URL'])
 
     # --- CALCULATION ENGINE ---
-    # Convert to numeric and handle missing values
     df['Total_Price'] = pd.to_numeric(df['Price_Bottle'], errors='coerce').fillna(0) + pd.to_numeric(df['Shipping'], errors='coerce').fillna(0)
     df['Elemental_Amount_mg'] = pd.to_numeric(df['Units_Total'], errors='coerce').fillna(0) * \
                                 pd.to_numeric(df['Amount_per_Unit'], errors='coerce').fillna(0) * \
@@ -51,18 +49,15 @@ if df is not None:
     
     df['Absorbed_Amount_mg'] = df['Elemental_Amount_mg'] * pd.to_numeric(df['Absorb_Coeff'], errors='coerce').fillna(1)
     
-    # Avoid division by zero
     df['Price_per_Elemental_Gram'] = df['Total_Price'] / (df['Elemental_Amount_mg'] / 1000).replace(0, 1)
     df['PPAA_1g_Absorbed'] = (df['Total_Price'] / (df['Absorbed_Amount_mg'].replace(0, 0.000001))) * 1000
 
     # --- SIDEBAR FILTERS ---
     st.sidebar.header("Filter & Analyze")
-    
-    unique_cats = df['Category'].unique()
+    unique_cats = df['Category'].unique() if not df.empty else ["N/A"]
     category = st.sidebar.selectbox("Select Supplement Type", unique_cats)
     filtered_cat = df[df['Category'] == category].copy()
     
-    # SMART TAG SYSTEM (split by '/')
     all_targets = set()
     target_data = filtered_cat['Target_Area'].fillna("General Health").astype(str)
     for t in target_data.unique():
@@ -78,21 +73,49 @@ if df is not None:
                                   "Level 2: Elemental ROI", 
                                   "Level 3: Shark Bio-Value (PPAA)"])
 
-    # FILTREERIMINE
     if target_filter == "General Health":
         final_filtered = filtered_cat.copy()
     else:
         final_filtered = filtered_cat[filtered_cat['Target_Area'].str.contains(target_filter, na=False)].copy()
 
-    # --- DESCRIPTION ---
+    # --- DESCRIPTION & SORTING ---
     st.divider()
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
         st.subheader(f"Level 1: Comparison by Shelf Price ({target_filter})")
-        st.write("💡 **Current Consumer Behavior:** Most people shop by the price on the bottle, ignoring actual content.")
     elif "Level 2" in view_level:
         sort_col = 'Price_per_Elemental_Gram'
         st.subheader(f"Level 2: Comparison by Elemental ROI ({target_filter})")
-        st.write("🔍 **The Smart Buyer View:** This reveals the cost of the raw mineral before absorption is considered.")
     else:
-        sort_col = 'PPAA_1g_Abs
+        sort_col = 'PPAA_1g_Absorbed'
+        st.subheader(f"🦈 Level 3: Comparison by Shark Bio-Value ({target_filter})")
+
+    final_df = final_filtered.sort_values(by=sort_col, ascending=True)
+
+    # --- DATA DISPLAY ---
+    display_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price']
+    if "Level 2" in view_level: display_cols.append('Price_per_Elemental_Gram')
+    if "Level 3" in view_level: 
+        display_cols.append('PPAA_1g_Absorbed')
+        display_cols.append('Notes')
+    
+    if 'URL' in final_df.columns: display_cols.append('URL')
+
+    st.dataframe(
+        final_df[display_cols],
+        column_config={
+            "URL": st.column_config.LinkColumn("Buy Now", display_text="Go to Store"),
+            "Total_Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+            "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elem. g", format="$%.3f/g"),
+            "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorb. g", format="$%.3f/g"),
+        },
+        use_container_width=True, hide_index=True
+    )
+
+    if not final_filtered.empty:
+        st.divider()
+        shark_winner = final_filtered.sort_values(by='PPAA_1g_Absorbed', ascending=True).iloc[0]
+        st.success(f"🏆 **SHARK'S CHOICE for {target_filter}:** {shark_winner['Brand']} ({shark_winner['Form']})")
+
+else:
+    st.info("Awaiting connection to Google Sheets data...")
