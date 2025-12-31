@@ -20,10 +20,11 @@ def load_data(url):
 df = load_data(SHEET_URL)
 
 if df is not None:
-    # Safety checks
+    # Safety checks for new columns
     if 'Target_Area' not in df.columns: df['Target_Area'] = "General Health"
     if 'Notes' not in df.columns: df['Notes'] = ""
     if 'Category' not in df.columns: df['Category'] = "Supplement"
+    if 'Unit_Type' not in df.columns: df['Unit_Type'] = "units"
 
     st.title("🦈 Shark Bio-Value Supplement Analyzer")
 
@@ -65,7 +66,6 @@ if df is not None:
     target_filter = st.sidebar.selectbox("Select Target Area", target_options)
     view_level = st.sidebar.radio("Analysis Depth", ["Level 1: Shelf Price", "Level 2: Elemental ROI", "Level 3: Shark Bio-Value (PPAA)"])
 
-    # Filter logic
     if target_filter == "General Health":
         final_filtered = filtered_cat.copy()
     else:
@@ -76,7 +76,7 @@ if df is not None:
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
         st.subheader(f"Level 1: Comparison by Shelf Price ({target_filter})")
-        st.write("💡 **Current Consumer Behavior:** This is how most people shop. They look at the price tag on the shelf, unaware of the actual mineral content or how much their body will actually absorb.")
+        st.write("💡 **Current Consumer Behavior:** This is how most people shop. They look at the price tag on the shelf, unaware of the actual mineral content.")
     elif "Level 2" in view_level:
         sort_col = 'Price_per_Elemental_Gram'
         st.subheader(f"Level 2: Comparison by Elemental ROI ({target_filter})")
@@ -84,12 +84,16 @@ if df is not None:
     else:
         sort_col = 'PPAA_1g_Absorbed'
         st.subheader(f"🦈 Level 3: Comparison by Shark Bio-Value ({target_filter})")
-        st.write("🚀 **The Expert/Shark View:** The ultimate analysis. This calculates the price of what *actually* enters your bloodstream, accounting for yield and bioavailability. This is the only way to find the true winner.")
+        st.write("🚀 **The Expert/Shark View:** The ultimate analysis. This calculates the price of what *actually* enters your bloodstream.")
 
     final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
-    # --- DISPLAY ---
-    display_cols = ['Brand', 'Form', 'Target_Area', 'Total_Price']
+    # --- DATA DISPLAY ---
+    # Define columns to show
+    display_cols = ['Brand', 'Form']
+    if 'Unit_Type' in final_df.columns: display_cols.append('Unit_Type')
+    display_cols.extend(['Target_Area', 'Total_Price'])
+
     if "Level 2" in view_level: display_cols.append('Price_per_Elemental_Gram')
     if "Level 3" in view_level: 
         display_cols.append('PPAA_1g_Absorbed')
@@ -103,7 +107,8 @@ if df is not None:
             "Total_Price": st.column_config.NumberColumn("Price", format="$%.2f"),
             "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elem. g", format="$%.3f/g"),
             "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorb. g", format="$%.3f/g"),
-            "Notes": st.column_config.TextColumn("Expert Notes", width="large")
+            "Notes": st.column_config.TextColumn("Expert Notes", width="large"),
+            "Unit_Type": st.column_config.TextColumn("Unit")
         },
         use_container_width=True, hide_index=True
     )
