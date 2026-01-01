@@ -123,12 +123,32 @@ if df is not None:
         use_container_width=True, hide_index=True
     )
 
-    # --- SHARK CHOICE ---
+    # --- SHARK CHOICE (Esiletoodud võitja) ---
     if not final_filtered.empty:
         st.divider()
         shark_winner = final_filtered.sort_values(by='PPAA_1g_Absorbed', ascending=True).iloc[0]
         st.success(f"🏆 **SHARK'S CHOICE:** {shark_winner['Brand']} ({shark_winner['Form']})")
         st.info(f"**Shark Insight:** In the **{view_level}** view, this product provides the most biological value for your money.")
+
+    # --- DIAGRAM (Nüüd lehe lõpus) ---
+    if not final_df.empty:
+        st.write("### 📊 Visuaalne võrdlus")
+        # Tekitame nime ja vormi kombinatsiooni graafiku jaoks
+        final_df['Chart_Label'] = final_df['Brand'] + " (" + final_df['Form'] + ")"
+        
+        # Plotly tulpdiagramm
+        fig = px.bar(
+            final_df,
+            x='Chart_Label',
+            y=sort_col,
+            title=f"{chart_title}",
+            labels={'Chart_Label': 'Toode', sort_col: y_label},
+            color=sort_col,
+            color_continuous_scale='RdYlGn_r' # Rohelisest punaseni
+        )
+        
+        fig.update_layout(xaxis_tickangle=-45, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
 
 else:
     st.info("Awaiting connection to Google Sheets data...")
