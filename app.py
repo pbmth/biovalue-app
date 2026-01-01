@@ -81,25 +81,6 @@ if df is not None:
 
     final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
-    # --- DIAGRAM ---
-    if not final_df.empty:
-        # Tekitame nime ja vormi kombinatsiooni graafiku jaoks
-        final_df['Chart_Label'] = final_df['Brand'] + " (" + final_df['Form'] + ")"
-        
-        # Plotly tulpdiagramm
-        fig = px.bar(
-            final_df,
-            x='Chart_Label',
-            y=sort_col,
-            title=f"📊 {chart_title}",
-            labels={'Chart_Label': 'Product', sort_col: y_label},
-            color=sort_col,
-            color_continuous_scale='RdYlGn_r' # Rohelisest punaseni (madal on roheline/hea)
-        )
-        
-        fig.update_layout(xaxis_tickangle=-45, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-
     # --- DATA TABLE ---
     display_cols = ['Brand', 'Form']
     if 'Unit_Type' in final_df.columns: display_cols.append('Unit_Type')
