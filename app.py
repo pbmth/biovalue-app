@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # CONFIGURATION
 st.set_page_config(page_title="Shark Bio-Value Analyzer", layout="wide")
@@ -20,11 +21,9 @@ def load_data(url):
 df = load_data(SHEET_URL)
 
 if df is not None:
-    # Safety checks for new columns
-    if 'Target_Area' not in df.columns: df['Target_Area'] = "General Health"
-    if 'Notes' not in df.columns: df['Notes'] = ""
-    if 'Category' not in df.columns: df['Category'] = "Supplement"
-    if 'Unit_Type' not in df.columns: df['Unit_Type'] = "units"
+    # Safety checks for columns
+    for col in ['Target_Area', 'Notes', 'Category', 'Unit_Type', 'URL']:
+        if col not in df.columns: df[col] = ""
 
     st.title("🦈 Shark Bio-Value Supplement Analyzer")
 
@@ -33,13 +32,8 @@ if df is not None:
         st.write("Paste an iHerb or store link below to see if the Shark can find you a better deal.")
         input_link = st.text_input("Product Link", placeholder="https://www.iherb.com/pr/...")
         if input_link:
-            potential_winners = df.sort_values(by='Absorb_Coeff', ascending=False)
-            if not potential_winners.empty:
-                top_deal = potential_winners.iloc[0]
-                st.info("💡 **Shark Analysis:** Most retail products have a 15-40% lower absorption rate than our recommendations.")
-                st.warning(f"⚠️ **Better Value Found!** Our database suggests **{top_deal['Brand']}** provides superior biological value.")
-                if 'URL' in top_deal and pd.notna(top_deal['URL']):
-                    st.link_button(f"View Shark Choice: {top_deal['Brand']}", top_deal['URL'])
+            st.warning("⚠️ **Shark Analysis:** Most retail products have a 15-40% lower absorption rate than our recommendations.")
+            st.info("Look at the chart below to see the 'Gold Standard' for this category.")
 
     # --- CALCULATION ENGINE ---
     df['Total_Price'] = pd.to_numeric(df['Price_Bottle'], errors='coerce').fillna(0) + pd.to_numeric(df['Shipping'], errors='coerce').fillna(0)
@@ -71,25 +65,42 @@ if df is not None:
     else:
         final_filtered = filtered_cat[filtered_cat['Target_Area'].str.contains(target_filter, na=False)].copy()
 
-    # --- LEVEL DESCRIPTIONS & SORTING ---
-    st.divider()
+    # --- LEVEL CONFIGURATION ---
     if "Level 1" in view_level:
         sort_col = 'Total_Price'
-        st.subheader(f"Level 1: Comparison by Shelf Price ({target_filter})")
-        st.write("💡 **Current Consumer Behavior:** This is how most people shop. They look at the price tag on the shelf, unaware of the actual mineral content.")
+        y_label = "Shelf Price ($)"
+        chart_title = "Comparison by Shelf Price"
     elif "Level 2" in view_level:
         sort_col = 'Price_per_Elemental_Gram'
-        st.subheader(f"Level 2: Comparison by Elemental ROI ({target_filter})")
-        st.write("🔍 **The Smart Buyer View:** This level reveals the cost of the raw mineral. It exposes 'cheap' bottles that are actually expensive because they contain very little active ingredient.")
+        y_label = "$ per Elemental Gram"
+        chart_title = "Comparison by Elemental ROI"
     else:
         sort_col = 'PPAA_1g_Absorbed'
-        st.subheader(f"🦈 Level 3: Comparison by Shark Bio-Value ({target_filter})")
-        st.write("🚀 **The Expert/Shark View:** The ultimate analysis. This calculates the price of what *actually* enters your bloodstream.")
+        y_label = "$ per Absorbed Gram"
+        chart_title = "Shark Bio-Value (PPAA)"
 
     final_df = final_filtered.sort_values(by=sort_col, ascending=True)
 
-    # --- DATA DISPLAY ---
-    # Define columns to show
+    # --- DIAGRAM ---
+    if not final_df.empty:
+        # Tekitame nime ja vormi kombinatsiooni graafiku jaoks
+        final_df['Chart_Label'] = final_df['Brand'] + " (" + final_df['Form'] + ")"
+        
+        # Plotly tulpdiagramm
+        fig = px.bar(
+            final_df,
+            x='Chart_Label',
+            y=sort_col,
+            title=f"📊 {chart_title}",
+            labels={'Chart_Label': 'Product', sort_col: y_label},
+            color=sort_col,
+            color_continuous_scale='RdYlGn_r' # Rohelisest punaseni (madal on roheline/hea)
+        )
+        
+        fig.update_layout(xaxis_tickangle=-45, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # --- DATA TABLE ---
     display_cols = ['Brand', 'Form']
     if 'Unit_Type' in final_df.columns: display_cols.append('Unit_Type')
     display_cols.extend(['Target_Area', 'Total_Price'])
@@ -108,15 +119,16 @@ if df is not None:
             "Price_per_Elemental_Gram": st.column_config.NumberColumn("$/Elem. g", format="$%.3f/g"),
             "PPAA_1g_Absorbed": st.column_config.NumberColumn("$/Absorb. g", format="$%.3f/g"),
             "Notes": st.column_config.TextColumn("Expert Notes", width="large"),
-            "Unit_Type": st.column_config.TextColumn("Unit")
         },
         use_container_width=True, hide_index=True
     )
 
+    # --- SHARK CHOICE ---
     if not final_filtered.empty:
         st.divider()
         shark_winner = final_filtered.sort_values(by='PPAA_1g_Absorbed', ascending=True).iloc[0]
-        st.success(f"🏆 **SHARK'S CHOICE for {target_filter}:** {shark_winner['Brand']} ({shark_winner['Form']})")
-        st.info(f"**Shark Insight:** Regardless of the shelf price, **{shark_winner['Brand']}** is the mathematical winner for **{target_filter}** because it delivers the best biological value per dollar spent.")
+        st.success(f"🏆 **SHARK'S CHOICE:** {shark_winner['Brand']} ({shark_winner['Form']})")
+        st.info(f"**Shark Insight:** In the **{view_level}** view, this product provides the most biological value for your money.")
+
 else:
     st.info("Awaiting connection to Google Sheets data...")
