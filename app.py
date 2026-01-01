@@ -112,20 +112,20 @@ if df is not None:
         st.info(f"**Shark Insight:** In the **{view_level}** view, this product provides the most biological value for your money.")
 
     # --- DIAGRAM (Nüüd lehe lõpus) ---
-    if not final_df.empty:
-        st.write("### 📊 Visuaalne võrdlus")
-        # Tekitame nime ja vormi kombinatsiooni graafiku jaoks
+   if not final_df.empty:
+        st.write("### 📊 Visual Comparison")
+        # Creating a combination of brand and form for the chart
         final_df['Chart_Label'] = final_df['Brand'] + " (" + final_df['Form'] + ")"
         
-        # Plotly tulpdiagramm
+        # Plotly bar chart
         fig = px.bar(
             final_df,
             x='Chart_Label',
             y=sort_col,
             title=f"{chart_title}",
-            labels={'Chart_Label': 'Toode', sort_col: y_label},
+            labels={'Chart_Label': 'Product', sort_col: y_label},
             color=sort_col,
-            color_continuous_scale='RdYlGn_r' # Rohelisest punaseni
+            color_continuous_scale='RdYlGn_r' # From green to red
         )
         
         fig.update_layout(xaxis_tickangle=-45, showlegend=False)
